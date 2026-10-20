@@ -34,6 +34,13 @@ DEFAULT_CONFIG: Dict[str, Any] = {
         "gdb_path": "auto",
         "cache_expiry": 300,
     },
+    "toolchain": {
+        "auto_install": True,
+        "prefer": "system",
+        "cache_dir": None,
+        "install_timeout": 900,
+        "mirror": None,
+    },
     "logging": {
         "level": "INFO",
         "audit_log": None,

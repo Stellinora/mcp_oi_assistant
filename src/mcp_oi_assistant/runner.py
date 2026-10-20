@@ -1,7 +1,6 @@
 """代码运行模块：编译、执行、调试C++程序。"""
 
 import os
-import shutil
 import subprocess
 import time
 from pathlib import Path
@@ -17,22 +16,14 @@ except (ImportError, ModuleNotFoundError):
 
 from .config import EXE_SUFFIX, load_config
 from .security import SecurityManager
-
-
-def _which_any(names: list) -> Optional[str]:
-    """依次在 PATH 中查找第一个可用的可执行文件。"""
-    for name in names:
-        found = shutil.which(name)
-        if found:
-            return found
-    return None
+from .toolchain import ToolchainManager
 
 
 class CodeRunner:
     """处理C++代码的编译、运行、调试和输出比较。"""
 
     def __init__(self, config_path: Optional[str] = None) -> None:
-        """初始化运行器，加载配置和安全管理器。"""
+        """初始化运行器、安全管理器与工具链管理器。"""
         self.config, self.config_path = load_config(config_path)
         self.config_dir = (
             self.config_path.parent if self.config_path else Path.cwd()
@@ -40,52 +31,32 @@ class CodeRunner:
         self.security = SecurityManager(
             str(self.config_path) if self.config_path else None
         )
-
-    def _resolve_tool(
-        self,
-        env_var: str,
-        configured: Optional[str],
-        mingw_name: str,
-        candidates: list,
-    ) -> Optional[str]:
-        """解析外部工具路径：环境变量 > 配置 > MinGW > PATH。"""
-        override = os.environ.get(env_var)
-        if override:
-            return override
-
-        if configured and configured != 'auto':
-            candidate = Path(configured).expanduser()
-            if not candidate.is_absolute():
-                candidate = self.config_dir / candidate
-            if candidate.is_file():
-                return str(candidate.resolve())
-            found = shutil.which(configured)
-            if found:
-                return found
-
-        if self.security.mingw_dir is not None:
-            mingw_candidate = self.security.mingw_dir / 'bin' / mingw_name
-            if mingw_candidate.is_file():
-                return str(mingw_candidate)
-
-        return _which_any(candidates)
+        self.toolchain = ToolchainManager(
+            self.config,
+            self.config_dir,
+            self.security.mingw_dir,
+        )
+        self.toolchain.start_background_install()
 
     def _resolve_compiler(self) -> Optional[str]:
-        """自动探测 C++ 编译器。"""
-        return self._resolve_tool(
-            'OI_CXX',
-            self.config.get('compilation', {}).get('compiler_path'),
-            f'g++{EXE_SUFFIX}',
-            [f'g++{EXE_SUFFIX}', 'g++', f'clang++{EXE_SUFFIX}', 'clang++'],
-        )
+        """返回当前可用的 C++ 编译器路径。"""
+        info = self.toolchain.detect()
+        return info.compiler if info else None
 
     def _resolve_gdb(self) -> Optional[str]:
-        """自动探测 GDB。"""
-        return self._resolve_tool(
-            'OI_GDB',
-            self.config.get('paths', {}).get('gdb_path'),
-            f'gdb{EXE_SUFFIX}',
-            [f'gdb{EXE_SUFFIX}', 'gdb'],
+        """返回当前可用的 GDB 路径。"""
+        info = self.toolchain.detect()
+        return info.gdb if info else None
+
+    def _compiler_error(self) -> str:
+        """构造工具链不可用的错误信息。"""
+        if self.toolchain.state == "installing":
+            return "工具链正在自动安装，请稍后重试"
+        if self.toolchain.last_error:
+            return f"工具链自动安装失败: {self.toolchain.last_error}"
+        return (
+            "未找到 C++ 编译器。请安装 g++/MinGW，"
+            "或运行 `mcp-oi-assistant --install-toolchain` 自动安装"
         )
 
     def compile_cpp(self, code: str, filename: Optional[str] = None) -> Dict[str, Any]:
@@ -103,14 +74,16 @@ class CodeRunner:
         exe_file.parent.mkdir(parents=True, exist_ok=True)
         cpp_file.write_text(code, encoding='utf-8')
 
-        compiler = self._resolve_compiler()
-        if not compiler:
+        timeout = float(self.config.get("toolchain", {}).get("install_timeout", 900))
+        info = self.toolchain.ensure_ready(timeout)
+        if info is None:
             return {
                 'success': False,
-                'error': '未找到 C++ 编译器，请安装 g++/clang++ 或设置 OI_CXX',
+                'error': self._compiler_error(),
                 'executable': None
             }
 
+        compiler = info.compiler
         std = self.config['compilation']['cpp_standard']
         optimization = self.config['compilation']['optimization_level']
 
@@ -132,7 +105,8 @@ class CodeRunner:
                 text=True,
                 check=False,
                 timeout=30,
-                cwd=cpp_file.parent
+                cwd=cpp_file.parent,
+                env=self.toolchain.child_env(),
             )
             return {
                 'success': result.returncode == 0,
@@ -221,6 +195,7 @@ class CodeRunner:
                         ),  # pylint: disable=subprocess-popen-preexec-fn
                         text=True,
                         cwd=self.security.temp_dir / "execute",
+                        env=self.toolchain.child_env(),
                     )
                 try:
                     # 使用 actual_time_limit（毫秒）计算超时秒数
@@ -338,7 +313,8 @@ class CodeRunner:
                 text=True,
                 check=False,
                 timeout=30,
-                cwd=self.security.temp_dir / "execute"
+                cwd=self.security.temp_dir / "execute",
+                env=self.toolchain.child_env(),
             )
             return {
                 'success': result.returncode == 0,

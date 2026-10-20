@@ -1,5 +1,7 @@
 """MCP服务器主模块，提供OI助手工具。"""
 
+import asyncio
+import json
 import sys
 import time
 from pathlib import Path
@@ -115,11 +117,22 @@ class OIAssistantServer:
                         },
                         "required": ["test_case_id"]
                     }
+                ),
+                types.Tool(
+                    name="get_environment_info",
+                    description="查看编译器、GDB、托管工具链与缓存状态",
+                    inputSchema={
+                        "type": "object",
+                        "properties": {},
+                    }
                 )
             ]
 
         @self.server.call_tool()
-        async def handle_call_tool(name: str, arguments: Dict[str, Any]) -> List[types.TextContent]:
+        async def handle_call_tool(  # pylint: disable=too-many-return-statements
+            name: str,
+            arguments: Dict[str, Any],
+        ) -> List[types.TextContent]:
             """分发工具调用请求。"""
             session_id = (
                 f"session_{int(time.time())}_"
@@ -139,6 +152,8 @@ class OIAssistantServer:
                     return await self._handle_compare_outputs(arguments)
                 if name == "read_test_case":
                     return await self._handle_read_test_case(arguments)
+                if name == "get_environment_info":
+                    return await self._handle_environment_info()
                 return [types.TextContent(type="text", text=f"未知工具: {name}")]
             except Exception as exc:  # pylint: disable=broad-exception-caught
                 print(f"工具执行错误: {exc}", file=sys.stderr)
@@ -167,7 +182,9 @@ class OIAssistantServer:
 
         # 1. 编译
         result_lines.append("\n### 1. 编译阶段")
-        compile_result = self.runner.compile_cpp(code, filename)
+        compile_result = await asyncio.to_thread(
+            self.runner.compile_cpp, code, filename
+        )
         if compile_result["success"]:
             result_lines.append("✅ 编译成功")
             if compile_result.get("output"):
@@ -186,7 +203,8 @@ class OIAssistantServer:
 
         # 2. 运行
         result_lines.append("\n### 2. 运行阶段")
-        run_result = self.runner.run_with_input(
+        run_result = await asyncio.to_thread(
+            self.runner.run_with_input,
             compile_result['executable'],
             input_data,
             time_limit,
@@ -258,12 +276,18 @@ class OIAssistantServer:
         code = arguments.get("code", "")
         gdb_script = arguments.get("gdb_script")
         filename = f"debug_{session_id}"
-        compile_result = self.runner.compile_cpp(code, filename)
+        compile_result = await asyncio.to_thread(
+            self.runner.compile_cpp, code, filename
+        )
         if not compile_result['success']:
             msg = "编译失败，无法调试:\n" + str(compile_result.get('error'))
             return [types.TextContent(type="text", text=msg)]
 
-        gdb_result = self.runner.run_gdb(compile_result['executable'], gdb_script)
+        gdb_result = await asyncio.to_thread(
+            self.runner.run_gdb,
+            compile_result['executable'],
+            gdb_script,
+        )
         result_lines = [
             "## GDB调试报告",
             f"会话ID: {session_id}",
@@ -354,6 +378,16 @@ class OIAssistantServer:
                 result_lines = [f"读取测试用例文件失败: {str(e)}"]
 
         return [types.TextContent(type="text", text="\n".join(result_lines))]
+
+    async def _handle_environment_info(self) -> List[types.TextContent]:
+        """返回工具链与缓存状态。"""
+        status = self.runner.toolchain.status()
+        return [
+            types.TextContent(
+                type="text",
+                text=json.dumps(status, ensure_ascii=False, indent=2),
+            )
+        ]
 
     async def run(self) -> None:
         """启动MCP服务器。"""

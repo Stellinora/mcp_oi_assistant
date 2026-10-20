@@ -24,6 +24,13 @@ paths:
   gdb_path: "auto"  # auto: 依次尝试 MinGW、PATH 中的 gdb
   cache_expiry: 300  # 缓存过期时间(秒)
   
+toolchain:
+  auto_install: true  # 系统没有编译器时自动下载到缓存目录
+  prefer: "system"  # system: 优先系统工具链；managed: 优先托管工具链
+  cache_dir: null  # null: 使用用户缓存目录
+  install_timeout: 900  # 首次等待自动安装的秒数
+  mirror: null  # 可选：工具链下载镜像（目录或 URL 前缀）
+
 logging:
   level: "INFO"
   audit_log: "./audit.log"
