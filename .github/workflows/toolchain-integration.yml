@@ -1,0 +1,24 @@
+name: Toolchain Integration
+
+on:
+  workflow_dispatch:
+
+jobs:
+  toolchain:
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+
+      - name: Install managed toolchain
+        run: uv run mcp-oi-assistant --install-toolchain
+
+      - name: Compile and run with managed toolchain
+        run: uv run python tests/integration_managed.py
