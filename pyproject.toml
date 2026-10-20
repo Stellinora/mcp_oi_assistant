@@ -1,0 +1,24 @@
+[build-system]
+requires = ["hatchling>=1.27"]
+build-backend = "hatchling.build"
+
+[project]
+name = "mcp-oi-assistant"
+version = "1.0.0"
+description = "MCP server for compiling, running and debugging C++ code for OI/competitive programming"
+readme = "README.md"
+requires-python = ">=3.10"
+license = "MIT"
+license-files = ["LICENSE"]
+dependencies = [
+    "mcp>=1.2.0,<2.0.0",
+    "PyYAML>=6.0",
+    "psutil>=5.9.0",
+    "platformdirs>=4.0",
+]
+
+[project.scripts]
+mcp-oi-assistant = "mcp_oi_assistant.__main__:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/mcp_oi_assistant"]

@@ -1,25 +1,26 @@
 """MCP服务器主模块，提供OI助手工具。"""
 
-import asyncio
 import sys
 import time
-from typing import Any, Dict, List
+from pathlib import Path
+from typing import Any, Dict, List, Optional
 
 from mcp.server import Server
 import mcp.server.stdio
 from mcp import types
 
-from runner import CodeRunner
-from security import SecurityManager
+from .config import EXE_SUFFIX
+from .runner import CodeRunner
+from .security import SecurityManager
 
 
 class OIAssistantServer:
     """MCP服务器，提供代码编译、运行、调试和测试工具。"""
 
-    def __init__(self) -> None:
+    def __init__(self, config_path: Optional[str] = None) -> None:
         """初始化服务器、运行器和安全管理器。"""
-        self.runner: CodeRunner = CodeRunner()
-        self.security: SecurityManager = SecurityManager()
+        self.runner: CodeRunner = CodeRunner(config_path)
+        self.security: SecurityManager = self.runner.security
         # Server 构造只接受名称参数
         self.server: Server = Server("oi-assistant")
         self.setup_handlers()
@@ -234,12 +235,13 @@ class OIAssistantServer:
                     result_lines.append(f"... 还有{extra}处差异未显示")
 
         # 4. 文件信息
-        temp_dir = self.security.temp_dir
+        temp_dir = Path(self.security.temp_dir)
+        safe_name = self.security.sanitize_filename(filename)
         result_lines.append("\n### 4. 文件信息")
-        src_path = f"{temp_dir}/sources/{filename}.cpp"
-        exe_path = f"{temp_dir}/execute/{filename}.exe"
-        in_path = f"{temp_dir}/inputs/{session_id}.in"
-        out_path = f"{temp_dir}/outputs/{session_id}.out"
+        src_path = temp_dir / "sources" / f"{safe_name}.cpp"
+        exe_path = temp_dir / "execute" / f"{safe_name}{EXE_SUFFIX}"
+        in_path = temp_dir / "inputs" / f"{session_id}.in"
+        out_path = temp_dir / "outputs" / f"{session_id}.out"
         result_lines.append(f"源代码: `{src_path}`")
         result_lines.append(f"可执行文件: `{exe_path}`")
         result_lines.append(f"输入文件: `{in_path}`")
@@ -362,19 +364,3 @@ class OIAssistantServer:
                 write_stream,
                 self.server.create_initialization_options()
             )
-
-
-def main() -> None:
-    """主入口函数。"""
-    server = OIAssistantServer()
-    print("OI助手MCP服务器启动中...", file=sys.stderr)
-    # 有些 SecurityManager 实现可能没有 mingw_dir 或 temp_dir，使用 getattr 安全访问
-    temp_dir_val = getattr(server.security, 'temp_dir', None)
-    mingw_dir_val = getattr(server.security, 'mingw_dir', None)
-    print(f"临时目录: {temp_dir_val}", file=sys.stderr)
-    print(f"MinGW目录: {mingw_dir_val}", file=sys.stderr)
-    asyncio.run(server.run())
-
-
-if __name__ == "__main__":
-    main()

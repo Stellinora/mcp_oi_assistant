@@ -14,13 +14,14 @@ execution:
   max_output_size: 1048576  # 最大输出大小(1MB)
   
 compilation:
-  compiler_path: "./mingw64/bin/g++.exe"
+  compiler_path: "auto"  # auto: 依次尝试 MinGW、PATH 中的 g++/clang++
   cpp_standard: "c++17"
   optimization_level: "-O2"
   
 paths:
-  temp_dir: "./tmp"
-  mingw_dir: "./mingw64"
+  temp_dir: "./tmp"  # 相对配置文件所在目录解析
+  mingw_dir: "./mingw64"  # 可选，不存在时使用 PATH 中的工具链
+  gdb_path: "auto"  # auto: 依次尝试 MinGW、PATH 中的 gdb
   cache_expiry: 300  # 缓存过期时间(秒)
   
 logging:

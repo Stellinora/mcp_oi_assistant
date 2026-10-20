@@ -1,13 +1,13 @@
 """代码运行模块：编译、执行、调试C++程序。"""
 
 import os
+import shutil
 import subprocess
 import time
 from pathlib import Path
 from typing import Any, Dict, Optional
 
 import psutil
-import yaml
 
 # 在 Windows 下没有 resource 模块，尽量兼容运行环境
 try:
@@ -15,39 +15,102 @@ try:
 except (ImportError, ModuleNotFoundError):
     resource = None  # type: ignore
 
-from security import SecurityManager  # 修复1：添加导入
+from .config import EXE_SUFFIX, load_config
+from .security import SecurityManager
+
+
+def _which_any(names: list) -> Optional[str]:
+    """依次在 PATH 中查找第一个可用的可执行文件。"""
+    for name in names:
+        found = shutil.which(name)
+        if found:
+            return found
+    return None
+
 
 class CodeRunner:
     """处理C++代码的编译、运行、调试和输出比较。"""
 
-    def __init__(self, config_path: str = "config.yaml") -> None:
+    def __init__(self, config_path: Optional[str] = None) -> None:
         """初始化运行器，加载配置和安全管理器。"""
-        # 确保 config_path 不为 None
-        if config_path is None:
-            config_path = "config.yaml"
+        self.config, self.config_path = load_config(config_path)
+        self.config_dir = (
+            self.config_path.parent if self.config_path else Path.cwd()
+        )
+        self.security = SecurityManager(
+            str(self.config_path) if self.config_path else None
+        )
 
-        with open(config_path, 'r', encoding='utf-8') as f:
-            self.config = yaml.safe_load(f)
+    def _resolve_tool(
+        self,
+        env_var: str,
+        configured: Optional[str],
+        mingw_name: str,
+        candidates: list,
+    ) -> Optional[str]:
+        """解析外部工具路径：环境变量 > 配置 > MinGW > PATH。"""
+        override = os.environ.get(env_var)
+        if override:
+            return override
 
-        # config_path 现在一定是 str
-        self.security = SecurityManager(config_path)
+        if configured and configured != 'auto':
+            candidate = Path(configured).expanduser()
+            if not candidate.is_absolute():
+                candidate = self.config_dir / candidate
+            if candidate.is_file():
+                return str(candidate.resolve())
+            found = shutil.which(configured)
+            if found:
+                return found
+
+        if self.security.mingw_dir is not None:
+            mingw_candidate = self.security.mingw_dir / 'bin' / mingw_name
+            if mingw_candidate.is_file():
+                return str(mingw_candidate)
+
+        return _which_any(candidates)
+
+    def _resolve_compiler(self) -> Optional[str]:
+        """自动探测 C++ 编译器。"""
+        return self._resolve_tool(
+            'OI_CXX',
+            self.config.get('compilation', {}).get('compiler_path'),
+            f'g++{EXE_SUFFIX}',
+            [f'g++{EXE_SUFFIX}', 'g++', f'clang++{EXE_SUFFIX}', 'clang++'],
+        )
+
+    def _resolve_gdb(self) -> Optional[str]:
+        """自动探测 GDB。"""
+        return self._resolve_tool(
+            'OI_GDB',
+            self.config.get('paths', {}).get('gdb_path'),
+            f'gdb{EXE_SUFFIX}',
+            [f'gdb{EXE_SUFFIX}', 'gdb'],
+        )
 
     def compile_cpp(self, code: str, filename: Optional[str] = None) -> Dict[str, Any]:
         """编译C++代码，返回包含成功标志、可执行文件路径和错误信息的字典。"""
         if filename is None:
             temp_path = self.security.get_secure_temp_path("compile")
             cpp_file = temp_path.with_suffix('.cpp')
-            exe_file = temp_path.with_suffix('.exe')
+            exe_file = temp_path.with_name(temp_path.name + EXE_SUFFIX)
         else:
             safe_name = self.security.sanitize_filename(filename)
             cpp_file = self.security.temp_dir / "sources" / f"{safe_name}.cpp"
-            exe_file = self.security.temp_dir / "execute" / f"{safe_name}.exe"
+            exe_file = self.security.temp_dir / "execute" / f"{safe_name}{EXE_SUFFIX}"
         cpp_file.parent.mkdir(parents=True, exist_ok=True)
         # 确保可执行文件父目录存在
         exe_file.parent.mkdir(parents=True, exist_ok=True)
         cpp_file.write_text(code, encoding='utf-8')
 
-        compiler = self.config['compilation']['compiler_path']
+        compiler = self._resolve_compiler()
+        if not compiler:
+            return {
+                'success': False,
+                'error': '未找到 C++ 编译器，请安装 g++/clang++ 或设置 OI_CXX',
+                'executable': None
+            }
+
         std = self.config['compilation']['cpp_standard']
         optimization = self.config['compilation']['optimization_level']
 
@@ -259,16 +322,15 @@ class CodeRunner:
             ])
             gdb_script.write_text(default_script, encoding='utf-8')
 
+        gdb_path = self._resolve_gdb()
+        if not gdb_path:
+            return {
+                'success': False,
+                'error': '未找到 gdb，请安装或设置 paths.gdb_path / OI_GDB',
+                'output': None
+            }
+
         try:
-            # 修复2：Path 已经在文件顶部导入
-            mingw_dir = None
-            if isinstance(self.config.get('paths'), dict):
-                mingw_dir = self.config['paths'].get('mingw_dir')
-
-            if not mingw_dir:
-                return {'success': False, 'error': '未配置 MinGW 路径 (paths.mingw_dir)', 'output': None}
-
-            gdb_path = str(Path(mingw_dir) / "bin" / "gdb.exe")
             cmd = [gdb_path, '-x', str(gdb_script), executable, '--batch']
             result = subprocess.run(
                 cmd,

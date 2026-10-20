@@ -1,8 +1,12 @@
 # Python
 __pycache__/
 *.py[cod]
+.venv/
+*.egg-info/
+dist/
 
 # Project directories
 .continue/
-.github/
 mingw64/
+tmp/
+audit.log

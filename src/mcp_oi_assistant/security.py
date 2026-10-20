@@ -7,24 +7,43 @@ import time
 from pathlib import Path
 from typing import Optional, Tuple
 
-import yaml
+from .config import (
+    REPO_ROOT,
+    default_temp_dir,
+    load_config,
+    resolve_config_relative,
+)
 
 
 class SecurityManager:
     """管理安全相关的操作，包括路径验证、文件名消毒等。"""
 
-    def __init__(self, config_path: str = "config.yaml") -> None:
+    def __init__(self, config_path: Optional[str] = None) -> None:
         """初始化安全管理器，加载配置文件并创建必要目录。"""
-        try:
-            with open(config_path, 'r', encoding='utf-8') as f:
-                self.config = yaml.safe_load(f)
-        except FileNotFoundError as exc:
-            raise FileNotFoundError(
-                f"配置文件 {config_path} 未找到"
-            ) from exc
+        self.config, self.config_path = load_config(config_path)
+        config_dir = (
+            self.config_path.parent if self.config_path else Path.cwd()
+        )
 
-        self.temp_dir = Path(self.config['paths']['temp_dir']).resolve()
-        self.mingw_dir = Path(self.config['paths']['mingw_dir']).resolve()
+        paths = self.config['paths']
+        temp_value = paths.get('temp_dir')
+        self.temp_dir = (
+            resolve_config_relative(config_dir, temp_value)
+            if temp_value
+            else default_temp_dir()
+        )
+
+        mingw_value = os.environ.get('OI_MINGW_DIR') or paths.get('mingw_dir')
+        if mingw_value:
+            self.mingw_dir: Optional[Path] = resolve_config_relative(
+                config_dir, mingw_value
+            )
+        else:
+            candidates = [REPO_ROOT / 'mingw64', Path.cwd() / 'mingw64']
+            self.mingw_dir = next(
+                (path for path in candidates if path.is_dir()), None
+            )
+
         self.create_secure_directories()
 
     def create_secure_directories(self) -> None:
@@ -60,11 +79,11 @@ class SecurityManager:
         """检查给定路径是否在允许的目录内。"""
         try:
             resolved = Path(path).resolve()
-            temp_resolved = self.temp_dir.resolve()
-            mingw_resolved = self.mingw_dir.resolve()
+            if resolved.is_relative_to(self.temp_dir.resolve()):
+                return True, resolved
             if (
-                str(resolved).startswith(str(temp_resolved)) or
-                str(resolved).startswith(str(mingw_resolved))
+                self.mingw_dir is not None
+                and resolved.is_relative_to(self.mingw_dir.resolve())
             ):
                 return True, resolved
             return False, None

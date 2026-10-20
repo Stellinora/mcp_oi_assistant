@@ -1,41 +1,20 @@
 #!/usr/bin/env python3
-"""OI助手MCP服务器启动入口。"""
+"""兼容旧入口：未安装时也可直接运行仓库内的 main.py。"""
 
-import asyncio
-import os
 import sys
-from logging import getLogger
+from pathlib import Path
 
-from mcp_server import OIAssistantServer
-
-logger = getLogger(__name__)
+SRC_DIR = Path(__file__).resolve().parent / "src"
+if str(SRC_DIR) not in sys.path:
+    sys.path.insert(0, str(SRC_DIR))
 
 
 def main() -> None:
-    """主函数：检查目录并启动服务器。"""
-    print("🚀 OI助手MCP服务器 v1.0")
-    print("=" * 50)
+    """调用包内入口。"""
+    # pylint: disable=import-outside-toplevel
+    from mcp_oi_assistant.__main__ import main as package_main
 
-    required_dirs = ['tmp', 'mingw64/bin']
-    for dir_path in required_dirs:
-        if not os.path.exists(dir_path):
-            print(f"⚠️  警告: 目录 '{dir_path}' 不存在")
-            if dir_path == 'mingw64/bin':
-                print("请确保MinGW已安装并放置在mingw64目录中")
-
-    server = OIAssistantServer()
-    try:
-        asyncio.run(server.run())
-    except KeyboardInterrupt:
-        print("\n👋 服务器已停止")
-    except RuntimeError as e:
-        print(f"❌ 服务器运行时错误: {e}", file=sys.stderr)
-        logger.exception("服务器运行时错误")
-        sys.exit(1)
-    except OSError as e:
-        print(f"❌ 系统错误: {e}", file=sys.stderr)
-        logger.exception("系统错误")
-        sys.exit(1)
+    package_main()
 
 
 if __name__ == "__main__":
