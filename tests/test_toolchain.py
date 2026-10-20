@@ -82,7 +82,7 @@ class DetectionTests(unittest.TestCase):
         with mock.patch.dict(os.environ, {"OI_CXX": str(compiler)}, clear=False):
             info = manager.detect()
         self.assertIsNotNone(info)
-        self.assertEqual(info.compiler, str(compiler.resolve()))
+        self.assertEqual(info.compiler, str(compiler.absolute()))
         self.assertEqual(info.source, "env")
 
     @unittest.skipIf(os.name == "nt", "需要 POSIX 可执行脚本")
