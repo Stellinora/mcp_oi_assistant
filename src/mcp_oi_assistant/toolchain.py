@@ -173,6 +173,21 @@ class ToolchainManager:  # pylint: disable=too-many-instance-attributes
                     return str(candidate.resolve())
         return None
 
+    def _find_compiler_fallback(self, root: Path) -> Optional[str]:
+        """在 bin 中按名称模式查找编译器，兼容带目标三元组前缀的命名。"""
+        for pattern in ("clang++*", "*clang++*", "g++*", "*g++*"):
+            candidates = sorted(
+                (
+                    path
+                    for path in (root / "bin").glob(pattern)
+                    if _is_executable(path)
+                ),
+                key=lambda path: (len(path.name), path.name),
+            )
+            if candidates:
+                return str(candidates[0].resolve())
+        return None
+
     def _managed_info(self) -> Optional[ToolchainInfo]:
         try:
             with open(self.current_file, "r", encoding="utf-8") as current:
@@ -625,6 +640,8 @@ class ToolchainManager:  # pylint: disable=too-many-instance-attributes
                 )
 
             compiler = self._find_in_dir(final_dir, entry["compiler_names"])
+            if compiler is None:
+                compiler = self._find_compiler_fallback(final_dir)
             if compiler is None:
                 raise ToolchainError("conda 环境中未找到 C++ 编译器")
             gdb = self._find_in_dir(final_dir, [entry["gdb_name"]])

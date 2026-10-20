@@ -64,12 +64,12 @@ uvx ... mcp-oi-assistant --clean-toolchain
 需要先安装 [uv](https://docs.astral.sh/uv/) 和 `git`（一次性）。之后一条命令即可启动，首次运行会下载并缓存，后续直接复用缓存：
 
 ```bash
-uvx --from "git+https://github.com/Stellinora/mcp_oi_assistant.git@v1.1.0" mcp-oi-assistant
+uvx --from "git+https://github.com/Stellinora/mcp_oi_assistant.git@v1.1.1" mcp-oi-assistant
 ```
 
 - 首次：拉取源码、构建并安装依赖，缓存到 `uv` 缓存目录。
 - 之后：复用已构建的缓存；使用 tag 时仍会向 GitHub 解析一次引用（约 1–2 秒）。
-- 完全离线：把 `@v1.1.0` 换成对应提交 SHA（`git rev-parse v1.1.0`），已缓存后可用 `UV_OFFLINE=1` 启动。
+- 完全离线：把 `@v1.1.1` 换成对应提交 SHA（`git rev-parse v1.1.1`），已缓存后可用 `UV_OFFLINE=1` 启动。
 - 升级：改用新 tag，或加 `--refresh`；清理缓存：`uv cache prune`。
 
 本地开发也可直接运行：
@@ -90,7 +90,7 @@ MCP 服务器需要配合支持 MCP 协议的 AI 客户端使用，如 Claude De
       "command": "uvx",
       "args": [
         "--from",
-        "git+https://github.com/Stellinora/mcp_oi_assistant.git@v1.1.0",
+        "git+https://github.com/Stellinora/mcp_oi_assistant.git@v1.1.1",
         "mcp-oi-assistant"
       ],
       "env": {
@@ -111,7 +111,7 @@ Windows 示例：
       "command": "C:\\Users\\你的用户名\\.local\\bin\\uvx.exe",
       "args": [
         "--from",
-        "git+https://github.com/Stellinora/mcp_oi_assistant.git@v1.1.0",
+        "git+https://github.com/Stellinora/mcp_oi_assistant.git@v1.1.1",
         "mcp-oi-assistant"
       ],
       "env": {

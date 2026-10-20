@@ -112,6 +112,19 @@ class DetectionTests(unittest.TestCase):
         self.assertEqual(info.source, "managed")
         self.assertEqual(info.prefix, str(prefix))
 
+    @unittest.skipIf(os.name == "nt", "需要 POSIX 可执行脚本")
+    def test_finds_triple_prefixed_compiler(self):
+        prefix = self.root / "env"
+        (prefix / "bin").mkdir(parents=True)
+        compiler = prefix / "bin" / "arm64-apple-darwin23.0-clang++"
+        compiler.write_text("#!/bin/sh\necho 'clang version test'\n", encoding="utf-8")
+        compiler.chmod(0o700)
+        manager = self._manager()
+        self.assertEqual(
+            manager._find_compiler_fallback(prefix),
+            str(compiler.resolve()),
+        )
+
     def test_auto_install_disabled_does_not_start(self):
         manager = self._manager()
         with mock.patch.object(manager, "detect", return_value=None):
