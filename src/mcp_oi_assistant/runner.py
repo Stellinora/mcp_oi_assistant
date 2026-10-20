@@ -167,15 +167,23 @@ class CodeRunner:
         # 资源限制函数（仅 Unix）
         def set_limits() -> None:
             # 仅在类 Unix 平台并且 resource 模块可用时设置限制
-            if os.name != 'nt' and resource is not None:
-                try:
-                    cpu_seconds = int(actual_time_limit // 1000 + 1)
-                    resource.setrlimit(resource.RLIMIT_CPU, (cpu_seconds, cpu_seconds))
-                    memory_bytes = int(actual_memory_limit * 1024 * 1024)
-                    resource.setrlimit(resource.RLIMIT_AS, (memory_bytes, memory_bytes))
-                except OSError:
-                    # 任何设置限制失败都不要让运行崩溃
-                    pass
+            if os.name == 'nt' or resource is None:
+                return
+            try:
+                cpu_seconds = int(actual_time_limit // 1000 + 1)
+                resource.setrlimit(
+                    resource.RLIMIT_CPU, (cpu_seconds, cpu_seconds)
+                )
+            except (OSError, ValueError):
+                pass
+            try:
+                memory_bytes = int(actual_memory_limit * 1024 * 1024)
+                resource.setrlimit(
+                    resource.RLIMIT_AS, (memory_bytes, memory_bytes)
+                )
+            except (OSError, ValueError):
+                # macOS 等平台可能不支持 RLIMIT_AS
+                pass
 
         start_time = time.time()
         try:
