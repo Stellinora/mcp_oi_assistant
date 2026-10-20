@@ -31,7 +31,8 @@ uvx --from "git+https://github.com/Stellinora/mcp_oi_assistant.git@v1.0.0" mcp-o
 ```
 
 - 首次：拉取源码、构建并安装依赖，缓存到 `uv` 缓存目录。
-- 之后：从缓存启动，可离线运行（`UV_OFFLINE=1`）。
+- 之后：复用已构建的缓存；使用 tag 时仍会向 GitHub 解析一次引用（约 1–2 秒）。
+- 完全离线：把 `@v1.0.0` 换成对应提交 SHA（`git rev-parse v1.0.0`），已缓存后可用 `UV_OFFLINE=1` 启动。
 - 升级：改用新 tag，或加 `--refresh`；清理缓存：`uv cache prune`。
 
 本地开发也可直接运行：
