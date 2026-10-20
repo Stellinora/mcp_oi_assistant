@@ -159,7 +159,7 @@ class ToolchainManager:  # pylint: disable=too-many-instance-attributes
         candidate = Path(value).expanduser()
         if candidate.is_absolute() or os.sep in value or "/" in value:
             if candidate.is_file():
-                return str(candidate.resolve())
+                return str(candidate.absolute())
             return None
         found = shutil.which(value)
         return found
@@ -170,7 +170,7 @@ class ToolchainManager:  # pylint: disable=too-many-instance-attributes
         for name in names:
             for candidate in (root / name, root / "bin" / name):
                 if _is_executable(candidate):
-                    return str(candidate.resolve())
+                    return str(candidate.absolute())
         return None
 
     def _find_compiler_fallback(self, root: Path) -> Optional[str]:
@@ -185,7 +185,7 @@ class ToolchainManager:  # pylint: disable=too-many-instance-attributes
                 key=lambda path: (len(path.name), path.name),
             )
             if candidates:
-                return str(candidates[0].resolve())
+                return str(candidates[0].absolute())
         return None
 
     def _managed_info(self) -> Optional[ToolchainInfo]:
@@ -220,11 +220,11 @@ class ToolchainManager:  # pylint: disable=too-many-instance-attributes
         dirs: List[str] = []
         for value in (compiler, gdb):
             if value:
-                parent = str(Path(value).resolve().parent)
+                parent = str(Path(value).absolute().parent)
                 if parent not in dirs:
                     dirs.append(parent)
         if prefix:
-            bin_dir = str((Path(prefix) / "bin").resolve())
+            bin_dir = str((Path(prefix) / "bin").absolute())
             if bin_dir not in dirs:
                 dirs.append(bin_dir)
         return dirs

@@ -122,8 +122,23 @@ class DetectionTests(unittest.TestCase):
         manager = self._manager()
         self.assertEqual(
             manager._find_compiler_fallback(prefix),
-            str(compiler.resolve()),
+            str(compiler.absolute()),
         )
+
+    @unittest.skipIf(os.name == "nt", "需要 POSIX 符号链接")
+    def test_symlinked_compiler_keeps_driver_name(self):
+        prefix = self.root / "env"
+        bin_dir = prefix / "bin"
+        bin_dir.mkdir(parents=True)
+        target = bin_dir / "clang-23"
+        target.write_text("#!/bin/sh\n", encoding="utf-8")
+        target.chmod(0o700)
+        link = bin_dir / "clang++"
+        link.symlink_to(target.name)
+        manager = self._manager()
+        found = manager._find_in_dir(prefix, ["clang++"])
+        self.assertEqual(found, str(link.absolute()))
+        self.assertTrue(found.endswith("clang++"))
 
     def test_auto_install_disabled_does_not_start(self):
         manager = self._manager()
